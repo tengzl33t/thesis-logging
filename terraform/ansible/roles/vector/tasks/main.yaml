@@ -1,0 +1,51 @@
+- name: Pull Vector docker image
+  docker_image:
+    name: timberio/vector:nightly-alpine
+    source: pull
+
+- name: Create config directory for Vector
+  file:
+    path: /opt/vector/config
+    state: directory
+
+- name: Create certs directory for Vector
+  file:
+    path: /opt/vector/certs
+    state: directory
+
+- name: Copy Vector config template
+  template:
+    src: vector.toml.j2
+    dest: /opt/vector/config/vector.toml
+  register: vector_changes
+
+- name: Copy certificates
+  copy:
+    src: "{{ item }}"
+    dest: /opt/vector/certs/
+    mode: 0644
+  loop:
+    - ca.crt
+    - loki.crt
+    - loki.key
+    - vector.crt
+    - vector.key
+  register: vector_changes
+
+- name: Create a Vector container
+  docker_container:
+    name: vector
+    image: "{{ vector_image }}"
+    state: started
+    ports:
+      - "{{ vector_port }}:{{ vector_port }}"
+    volumes:
+      - /opt/vector/config/vector.toml:/etc/vector/vector.toml:ro
+      - /opt/vector/certs:/etc/vector/certs:ro
+    restart: "{{ vector_changes.changed | default(false) }}"
+    etc_hosts: >
+      {
+        "vector.company.internal": "{{ hostvars['vector.company.internal']['ansible_default_ipv4']['address'] }}",
+        "loki.company.internal": "{{ hostvars['loki.company.internal']['ansible_default_ipv4']['address'] }}"
+      }
+    restart_policy: unless-stopped

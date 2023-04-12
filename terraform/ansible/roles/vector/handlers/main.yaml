@@ -1,0 +1,5 @@
+- name: Restart Vector container
+  docker_container:
+    name: vector
+    state: started
+    recreate: yes

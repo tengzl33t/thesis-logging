@@ -1,0 +1,47 @@
+- name: Pull Loki docker image
+  docker_image:
+    name: grafana/loki:2.7.4
+    source: pull
+
+- name: Create config directory for Loki
+  file:
+    path: /opt/loki/config
+    state: directory
+
+- name: Create certs directory for Loki
+  file:
+    path: /opt/loki/certs
+    state: directory
+
+- name: Copy Loki config template
+  template:
+    src: loki.yaml.j2
+    dest: /opt/loki/config/loki.yaml
+
+- name: Copy certificates
+  copy:
+    src: "{{ item }}"
+    dest: /opt/loki/certs/
+    mode: 0644
+  loop:
+    - ca.crt
+    - loki.crt
+    - loki.key
+
+- name: Create a Loki container
+  docker_container:
+    name: loki
+    image: "{{ loki_image }}"
+    state: started
+    ports:
+      - "{{ loki_port }}:{{ loki_port }}"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - /opt/loki/config/loki.yaml:/etc/loki/local-config.yaml:ro
+      - /opt/loki/certs:/etc/loki/certs:ro
+    etc_hosts: >
+      {
+        "vector.company.internal": "{{ hostvars['vector.company.internal']['ansible_default_ipv4']['address'] }}",
+        "loki.company.internal": "{{ hostvars['loki.company.internal']['ansible_default_ipv4']['address'] }}"
+      }
+    restart_policy: unless-stopped

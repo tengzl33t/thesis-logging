@@ -1,0 +1,11 @@
+- name: Make sure the directory exists (Debian-Based)
+  file:
+    path: /usr/local/share/ca-certificates
+    state: directory
+
+- name: Copy cert into directory (Debian-Based)
+  copy:
+    src: "company-internal-ca.crt"
+    dest: "/usr/local/share/ca-certificates/company-internal-ca.crt"
+  notify:
+    - Update CA Trust (Debian-Based)

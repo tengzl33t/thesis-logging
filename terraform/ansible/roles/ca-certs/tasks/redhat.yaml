@@ -1,0 +1,11 @@
+- name: Make sure the directory exists (RedHat-Based)
+  file:
+    path: /etc/pki/ca-trust/source/anchors
+    state: directory
+
+- name: Copy cert into directory (RedHat-Based)
+  copy:
+    src: "company-internal-ca.crt"
+    dest: "/etc/pki/ca-trust/source/anchors/company-internal-ca.crt"
+  notify:
+    - Update CA Trust (RedHat-Based)

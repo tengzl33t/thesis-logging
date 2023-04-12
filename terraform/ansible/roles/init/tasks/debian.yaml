@@ -1,0 +1,10 @@
+- name: Install required packages (Debian-Based)
+  apt:
+    name:
+      - curl
+      - gnupg
+      - ca-certificates
+      - python3
+      - python3-pip
+    state: latest
+    update_cache: true

@@ -1,0 +1,6 @@
+- name: Update CA Trust (Debian-Based)
+  command: update-ca-certificates
+
+- name: Update CA Trust (RedHat-Based)
+  command: update-ca-trust
+

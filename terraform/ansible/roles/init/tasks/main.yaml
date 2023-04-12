@@ -1,0 +1,5 @@
+- include: debian.yaml
+  when: ansible_facts['os_family'] == "Debian"
+
+- include: redhat.yaml
+  when: ansible_facts['os_family'] == "RedHat"

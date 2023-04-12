@@ -1,0 +1,96 @@
+{% raw %}
+[sources.syslog]
+type = "syslog"
+mode = "tcp"
+{% endraw %}
+address = "0.0.0.0:{{ vector_port }}"
+{% raw %}
+tls.enabled = true
+tls.crt_file = "/etc/vector/certs/vector.crt"
+tls.key_file = "/etc/vector/certs/vector.key"
+tls.ca_file = "/etc/vector/certs/ca.crt"
+tls.verify_certificate = true
+tls.verify_hostname = true
+
+[transforms.nginx_filtered]
+type = "filter"
+inputs = ["syslog"]
+condition = '.appname == "nginx"'
+
+[transforms.nginx_access_filtered]
+type = "filter"
+inputs = ["nginx_filtered"]
+condition = '.severity == "info"'
+
+[transforms.nginx_err_filtered]
+type = "filter"
+inputs = ["nginx_filtered"]
+condition = '.severity == "err"'
+
+[transforms.nginx_err_level_processed]
+inputs = ["nginx_err_filtered"]
+type = "remap"
+source = '''
+.level = parse_regex!(.message, r'\[(?P<level>\w+)]')
+. = merge(., .level)
+'''
+
+[transforms.nginx_access_processed]
+inputs = ["nginx_access_filtered"]
+type = "remap"
+source = '''
+.message = parse_regex!(.message, r'^(?P<source_ip>\d+\.\d+\.\d+\.\d+) \- (?P<user>-|[a-z_][a-z0-9_]{0,30}) \[(?P<log_timestamp>[^]]+)] "(?P<method>GET|POST|HEAD|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH) (?P<request_uri>/[^\s]*) (?P<http_version>HTTP/\d\.\d)" (?P<status_code>\d{3}) (?P<body_bytes_sent>\d+) "(?P<server>[^\s]+)" "(?P<user_agent>[^"]+)" "(?P<forward_for>[^"]+)" "(?P<request_id>[a-z0-9]+)" "(?P<ssl_protocol>[^\s]+)" "(?P<ssl_cipher>[^\s]+)" "(?P<upstream_addr>[^\s]+)" "(?P<upstream_resp_time>[^\s]+)" "(?P<upstream_status>[^\s]+)"$')
+
+.customer_name = get!(value: ."additional@0", path: ["customer_name"])
+.sensor_name = get!(value: ."additional@0", path: ["sensor_name"])
+.cloud_provider = get!(value: ."additional@0", path: ["cloud_provider"])
+.log_timestamp = to_timestamp!(get!(value: .message, path: ["log_timestamp"]))
+log(.)
+.additionals = {"log_timestamp": .log_timestamp, "type": "access", "customer_name": .customer_name, "sensor_name": .sensor_name, "cloud_provider": .cloud_provider}
+. = merge(.message, .additionals)
+'''
+
+[transforms.nginx_error_processed]
+inputs = ["nginx_err_level_processed"]
+type = "remap"
+source = '''
+.message = parse_regex!(.message, r'^(?P<log_timestamp>.+) \[(?P<level>\w+)] (?P<pid>\d+#\d+): \*(?P<tid>\d+) (?P<cid_message>[^,]+), client: (?P<client_ip>\d+\.\d+\.\d+\.\d+), server: (?P<server>[^,]+)(?:, request: "(?P<method>GET|POST|HEAD|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH) (?P<request_uri>/[^\s]+) (?P<http_version>HTTP/\d\.\d)")?(?:, upstream: "(?P<upstream_url>[^"]+)")?(?:, host: "(?P<host>[^"]+)")?(?:, refferer: "(?P<refferer>[^"]+)")?$')
+
+.customer_name = get!(value: ."additional@0", path: ["customer_name"])
+.sensor_name = get!(value: ."additional@0", path: ["sensor_name"])
+.cloud_provider = get!(value: ."additional@0", path: ["cloud_provider"])
+.log_timestamp = to_timestamp!(replace!(get!(value: .message, path: ["log_timestamp"]), "/", "-"))
+
+.additionals = {"log_timestamp": .log_timestamp, "type": "error", "customer_name": .customer_name, "sensor_name": .sensor_name, "cloud_provider": .cloud_provider}
+. = merge(.message, .additionals)
+'''
+
+# DEBUG
+#[sinks.print]
+#type = "console"
+#inputs = ["syslog"]
+#encoding.codec = "json"
+
+[sinks.loki]
+type = "loki"
+inputs = [ "nginx_access_processed", "nginx_error_processed" ]
+{% endraw %}
+endpoint = "https://loki.company.internal:{{ loki_port }}"
+{% raw %}
+encoding.codec = "json"
+#tls.enabled = true
+tls.crt_file = "/etc/vector/certs/loki.crt"
+tls.key_file = "/etc/vector/certs/loki.key"
+tls.ca_file = "/etc/vector/certs/ca.crt"
+tls.verify_certificate = true
+tls.verify_hostname = true
+healthcheck.enabled = false
+
+[sinks.loki.labels]
+service = "sensor"
+app = "nginx"
+type = "{{ type }}"
+customer_name = "{{ customer_name }}"
+server = "{{ server }}"
+sensor_name = "{{ sensor_name }}"
+{% endraw %}

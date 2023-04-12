@@ -1,0 +1,15 @@
+- include: debian.yaml
+  when: ansible_facts['os_family'] == "Debian"
+
+- include: redhat.yaml
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Enable and start docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Install Docker Module for Python
+  pip:
+    name: docker
